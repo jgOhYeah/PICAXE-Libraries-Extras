@@ -1,0 +1,11 @@
+; AnotherFile.basinc
+; File to be included for testing
+high_led_sub:
+    ; Calling this for the sake of calling a function
+    high LED_PIN
+    return
+
+low_led_sub:
+    ; Calling this for the sake of calling a function
+    low LED_PIN
+    return
