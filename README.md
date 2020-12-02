@@ -1,5 +1,7 @@
-# PICAXE-Libraries-Extras
-Extra code and libraries I have written for PICAXE microcontrollers
+# PICAXE Libraries and Extras
+Extra code and libraries I have written for PICAXE microcontrollers.
+
+Feedback / Improvements are welcome.
 
 ## Python Preprocessor
 Implementation of a very simple and limited preprocessor for the PICAXE compiler.
@@ -17,21 +19,21 @@ picaxe.py [OPTION]... FILE.bas
 
 #### Optional switches (similar to those in the PICAXE compilers)
 
-| Switch       | Description                                                                                                                                       |
-| ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `-v`         | Variant (default 08m2) <br>(alternatively use #PICAXE directive within the program. This option will be ignored if #PICAXE is used)               |
-| `-s`         | Syntax check only (no download)                                                                                                                   |
-| `-f`         | Firmware check only (no download)                                                                                                                 |
-| `-cPortName` | Assign COM/USB port device (default /dev/ttyUSB0) <br>(alternately use #COM directive within program This option will be ignored if #COM is used) |
-| `-d`         | Leave port open for debug display (b0-13)                                                                                                         |
-| `-dh`        | Leave port open for debug display (hex mode)                                                                                                      |
-| `-e`         | Leave port open for debug display (b14-b27)                                                                                                       |
-| `-eh`        | Leave port open for debug display (hex mode)                                                                                                      |
-| `-t`         | Leave port open for sertxd display                                                                                                                |
-| `-th`        | Leave port open for sertxd display (hex mode)                                                                                                     |
-| `-ti`        | Leave port open for sertxd display (int mode)                                                                                                     |
-| `-p`         | Add pass message to error report file                                                                                                             |
-| `-h`         | Display this help text                                                                                                                            |
+| Switch       | Description                                                                                                                                             |
+| ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `-v`         | Variant (default `08m2`) <br>(alternatively use `#PICAXE` directive within the program. This option will be ignored if `#PICAXE` is used)               |
+| `-s`         | Syntax check only (no download)                                                                                                                         |
+| `-f`         | Firmware check only (no download)                                                                                                                       |
+| `-cPortName` | Assign COM/USB port device (default `/dev/ttyUSB0`) <br>(alternately use `#COM` directive within program This option will be ignored if `#COM` is used) |
+| `-d`         | Leave port open for debug display (`b0`-`13`)                                                                                                           |
+| `-dh`        | Leave port open for debug display (hex mode)                                                                                                            |
+| `-e`         | Leave port open for debug display (`b14`-`b27`)                                                                                                         |
+| `-eh`        | Leave port open for debug display (hex mode)                                                                                                            |
+| `-t`         | Leave port open for sertxd display                                                                                                                      |
+| `-th`        | Leave port open for sertxd display (hex mode)                                                                                                           |
+| `-ti`        | Leave port open for sertxd display (int mode)                                                                                                           |
+| `-p`         | Add pass message to error report file                                                                                                                   |
+| `-h`         | Display this help text                                                                                                                                  |
 
 #### Examples
 ##### 14M2 chip on COM1 with AXE026 serial cable
@@ -48,3 +50,6 @@ picaxe.py -v18m2 -c/dev/ttyUSB0 test.bas
 ```
 picaxe.py -s test.bas
 ```
+
+### Testing files
+Run the compiler on `HelloWorld.bas` and all other files linked to by it should be merged and compiled.
