@@ -12,6 +12,8 @@ This script merges all files into one and calls the correct compiler to process 
 The compilers can be downloaded from the PICAXE website software section if needed, found at:
 https://www.picaxe.co.uk.
 
+If you need macros and defines, you might be interested in [this similar preprocessor](https://github.com/Patronics/PicaxePreprocess), also written in python.
+
 ### Usage
 ```
 picaxe.py [OPTION]... FILE.bas
