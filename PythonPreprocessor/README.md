@@ -1,13 +1,13 @@
 # Python Preprocessor
 Implementation of a very simple and limited preprocessor for the PICAXE compiler.
+[This preprocessor](https://github.com/Patronics/PicaxePreprocess) is very similar and has more features implemented, so I recommend that you use that one. It is also written in Python.
+
 This script is aimed as a workaround for enabling #include on platforms other than Windows as this
 is handled by the preprocessor that is built into the Windows only programming editor 6, which is
 not included with the command line compilers.
 This script merges all files into one and calls the correct compiler to process or upload the code.
 The compilers can be downloaded from the PICAXE website software section if needed, found at:
 https://www.picaxe.co.uk.
-
-If you need macros and defines, you might be interested in [this similar preprocessor](https://github.com/Patronics/PicaxePreprocess), also written in python.
 
 ## Usage
 ```
