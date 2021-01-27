@@ -34,8 +34,6 @@ Most of this code has been tested to run on a 14m2 or 18m2 with an Ra-01 module 
   - [Receive.bas](#receivebas)
   - [PJONReceive.bas](#pjonreceivebas)
   - [BatteryVoltsMonitor.bas](#batteryvoltsmonitorbas)
-    - [Stripboard Plans](#stripboard-plans)
-    - [Photos](#photos)
 - [Other code and info for using LoRa modules with PICAXE uCs](#other-code-and-info-for-using-lora-modules-with-picaxe-ucs)
 
 
@@ -330,24 +328,7 @@ This is a simple example demonstrating receiving of raw LoRa packets. This initi
 This example demonstrates the use of the PJON module to receive and print PJON formatted packets to the serial port.
 
 ## [BatteryVoltsMonitor.bas](BatteryVoltsMonitor.bas)
-This is code currently in use in a device that is monitoring battery charge in a remote solar powered electric fence. It sends a packet with the battery voltage once every few minutes and listens for an incoming packet for a set time after each tansmission. The incoming packet can tell the device to turn the fence on or off or control other aspects of the radio link such as disabling tranmissions until another incoming packet enables them or requesting the current status be resent.
-
-This is currently talking to an Arduino nano based base station, however this needs a lot more fixing up and polish before I make it publically available.
-
-### Stripboard Plans
-I used KiCad to plan a layout on veroboard so that I knew there was room for everything and I didn't end up cutting the wrong tracks. The yellow circles and lines in layer `Eco2.User` are where tracks should be cut. The KiCad files can be found [here](BatteryMonitorVeroboardLayout).
-![Battery Voltage Monitor Schematic](Pictures/BatteryMonitorSchematic.png)
-![Planned layout on stripboard](Pictures/BatteryMonitorVeroboardLayout.svg)
-
-### Photos
-This is a work in progess and as such it is only temperarily mounted in the shed, although you know what they say about temporary things :).
-![Circuit on stripboard in a plastic box](Pictures/BatteryMonitor.jpg)
-
-Battery voltage monitor before the mosfet was added for controlling the fence and an external antenna to improve range.
-
-![Inside of a shed with fence energiser, battery and monitor](Pictures/ShedInside.jpg)
-
-The shed and setup of the battery monitor.
+This is a project of mine using these modules. It can be found [here](https://github.com/jgOhYeah/Farm-PJON-LoRa-network)
 
 # Other code and info for using LoRa modules with PICAXE uCs
 - [HABAXE](https://picaxeforum.co.uk/threads/habaxe2-a-lora-based-high-altitude-balloon-tracker-project.26699/) is a High Altitude Baloon tracker built around x2 series chips and SX1278 based radio modules. It can also use them to transmit FSK modulated data as well as LoRa.
