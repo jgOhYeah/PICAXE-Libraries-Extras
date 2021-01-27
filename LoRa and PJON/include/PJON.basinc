@@ -1,0 +1,444 @@
+; PJON.basinc
+; Basic BASIC implementation of the PJON Protocol for use with LoRa.
+; The official C++ library can be found here: https://www.pjon.org/
+; Jotham Gates
+; Created: 24/11/2020
+; Modified: 25/01/2021
+; https://github.com/jgOhYeah/PICAXE-Libraries-Extras
+; TODO: Allow bus ids and more flexibility in packet types
+; TODO: Allow it to work with other strategies
+
+; symbol PACKET_HEADER = %00000010 ; Local mode, no bus id, tx sender info
+symbol PACKET_HEADER = %00100110 ; CRC32, ACK, TX info
+symbol PACKET_HEAD_LENGTH = 5 ; Local mode, no bus id, tx sender info
+; symbol BUS_ID_0 = 0 ; Not implemented yet
+; symbol BUS_ID_1 = 0
+; symbol BUS_ID_2 = 0
+; symbol BUS_ID_3 = 0
+symbol PACKET_TX_START = 28 ; The address of the first byte in memory to use when transmitting.
+symbol PACKET_RX_START = 63 ; The address of the first byte in memory to use when receiving.
+							; RX is separate to TX so that a packet could theoretically be built
+							; while another is received.
+symbol PACKET_RX_HEADER = 64
+symbol PACKET_RX_LENGTH = 65 ; Needs to be the byte after PACKET_RX_HEADER. Defined here as the
+							 ; compiler doesn't seem to have any optimisations or evaluation of
+							 ; expressions with only constants.
+
+; PJON header byte bits
+symbol HEADER_PKT_ID = %10000000
+symbol HEADER_EXT_LENGTH = %01000000
+symbol HEADER_CRC = %00100000
+symbol HEADER_PORT = %00010000
+symbol HEADER_ACK_MODE = %00001000
+symbol HEADER_ACK = %0000100
+symbol HEADER_TX_INFO = %0000010
+symbol HEADER_MODE = %00000001
+
+; #DEFINE DEBUG_PJON_RECEIVE ; At this stage, cannot include code for transmitting and debug as not enough memory
+
+; Check the correct files have been included to reduce cryptic error messages.
+#IFNDEF FILE_SYMBOLS_INCLUDED
+	#ERROR "'symbols.basinc' is not included. Please make sure it included above 'PJON.basinc'."
+#ENDIF
+#IFNDEF FILE_GENERATED_INCLUDED
+	#ERROR "'generated.basinc' is not included. Please make sure it included above 'PJON.basinc'."
+#ENDIF
+#IFNDEF FILE_LORA_INCLUDED
+	#ERROR "'LoRa.basinc' is not included. Please make sure it is included above 'PJON.basinc'."
+#ENDIF
+#IFDEF ENABLE_PJON_RECEIVE
+	#IFNDEF ENABLE_LORA_RECEIVE
+		#ERROR "'ENABLE_LORA_RECEIVE' must be defined to use PJON receive."
+	#ENDIF
+#ENDIF
+#IFDEF ENABLE_PJON_TRANSMIT
+	#IFNDEF ENABLE_LORA_TRANSMIT
+		#ERROR "'ENABLE_LORA_TRANSMIT' must be defined to use PJON transmit."
+	#ENDIF
+#ENDIF
+
+#IFDEF ENABLE_PJON_TRANSMIT
+begin_pjon_packet:
+	; Sets bptr to the correct location to start writing data
+	bptr = PACKET_TX_START + PACKET_HEAD_LENGTH
+	return
+
+end_pjon_packet:
+	; Finalises the packet, writes the header and sends it using LoRa radio
+	; param1 contains the id
+	level = bptr
+	param2 = bptr - PACKET_TX_START + 4 ; Length of packet with the crc bytes
+	gosub write_pjon_header
+	
+	param1 = level - PACKET_TX_START; Length of the packet without the final crc bytes
+	bptr = PACKET_TX_START
+	gosub crc32_compute
+	; Add the final crc
+	@bptrinc = crc3
+	@bptrinc = crc2
+	@bptrinc = crc1
+	@bptrinc = crc0
+	
+	; Send the packet
+	gosub begin_lora_packet
+	param1 = bptr - PACKET_TX_START
+	bptr = PACKET_TX_START
+	gosub write_lora
+	gosub end_lora_packet
+	return
+
+write_pjon_header:
+	; param1 contains the id
+	; param2 contains the length
+	; Afterwards, bptr is at the correct location to begin writing the packet contents.
+	bptr = PACKET_TX_START
+	@bptrinc = param1
+	@bptrinc = PACKET_HEADER
+	@bptrinc = param2
+	; CRC of everything up to now
+	bptr = PACKET_TX_START
+	param1 = 3
+	gosub crc8_compute
+	@bptrinc = rtrn
+	; PJON local only implemented at this stage
+	@bptrinc = MY_ID ; Add sender id
+	return
+
+#ENDIF
+
+#IFDEF ENABLE_PJON_RECEIVE
+read_pjon_packet:
+	; Reads the packet and if the header is valid, copy to bptr (we need to be able to calculate the
+	; checksum at the end, so storage on the chip is required).
+	; If there is not packet, it is not addressed to us or it is invalid / fails the checksum, rtrn
+	; will be PJON_INVALID_PACKET. If the packet is valid and addressed to us, rtrn will be the
+	; payload length and bptr will point to the first byte of the payload.
+	; param1 contains the sender id or 0 if there is none.
+	;
+	; Variables read: none
+	; Variables modified: crc0, crc1, crc2, crc3, counter, param1, param2, counter2, tmpwd, mask,
+	;                     level, rtrn, s_transfer_Storage, bptr, total_length, start_time,
+	;                     start_time_h, start_time_l, counter3 (in other words, everything defined
+	;                     as of when this was written)
+
+	gosub setup_lora_read
+	if rtrn != LORA_RECEIVED_CRC_ERROR then
+		total_length = rtrn
+		; counter3 = 0
+		bptr = PACKET_RX_START
+		; Read the packet header into ram.
+		if total_length >= 4 then ; There needs to be at least 4 bytes for the header
+			; Address
+			gosub read_lora ; rtrn contains the packet id
+			; inc counter3
+			if rtrn = MY_ID or rtrn = 0 then
+	#IFDEF DEBUG_PJON_RECEIVE
+				sertxd("PKT is to us", cr, lf)
+	#ENDIF
+				; This is a valid id we should respond to
+				@bptrinc = rtrn
+
+				; Packet header byte
+				gosub read_lora ; rtrn contains the header
+				; inc counter3
+				@bptrinc = rtrn
+				; TODO: Proper full implementation of all header options
+				; Ignores Packet_ID
+				; Ignores EXT_LENGTH (LoRa is limited in length anyway)
+				; CRC is processed later
+				; PORT is ignored
+				; ACK mode is ignored
+				; ACK is ignored
+				; TX Info is processed later
+				; Mode is ignored (assumes local)
+					
+				; Packet length
+				gosub read_lora
+				; inc counter3
+				@bptrinc = rtrn
+
+				; Get the checksum of the header.
+				gosub read_lora
+				; inc counter3
+				@bptrinc = rtrn
+				param2 = rtrn ; crc8_compute does not use param2... hopefully
+
+				; Check crc of the received header and compare it to what it should be.
+				bptr = PACKET_RX_START
+				param1 = 3 ; Address, Header, Length
+				gosub crc8_compute
+				if param2 = rtrn then
+					; Checksums match. All good.
+					; Calculate the required length and check that the LoRa packet is at least that.
+					start_time = 0 ; Total length calculations. Mose well reset start_time_h and start_time_l at the same time
+					; Read the sender id if needed
+					bptr = PACKET_RX_HEADER
+					tmpwd = @bptr & HEADER_TX_INFO
+	#IFDEF DEBUG_PJON_RECEIVE
+					sertxd("Header is: ", #@bptr, cr, lf)
+	#ENDIF
+					if tmpwd != 0 then
+	#IFDEF DEBUG_PJON_RECEIVE
+						sertxd("Sender info is included", cr, lf)
+	#ENDIF
+						start_time_l = 1
+					endif
+
+					; Set the length of the checksum
+					; bptr = PACKET_RX_HEADER ; Hopefully should still be there
+					tmpwd = @bptrinc & HEADER_CRC
+					if tmpwd != 0 then
+						; 32 bit checksum at the end
+	#IFDEF DEBUG_PJON_RECEIVE
+						sertxd("32 bit checksum", cr, lf)
+	#ENDIF
+						crc1 = 4
+					else
+						; 8 bit checksum at the end
+	#IFDEF DEBUG_PJON_RECEIVE
+						sertxd("8 bit checksum", cr, lf)
+	#ENDIF
+						crc1 = 1
+					endif
+
+					; Read the packet length - should be there now after header
+					; bptr = PACKET_RX_LENGTH
+					start_time_h = @bptr - 4 - start_time_l - crc1 ; start_time_h is the payload length
+					; NOTE: Above is a possible failure point
+					; Check if the required length will fit inside the packet
+					if @bptrdec <= total_length then ; Should be at packet length
+						; Length is correct. Can safely read until the end of the packet
+						; Copy the sender id if included
+						tmpwd = @bptr & HEADER_TX_INFO
+						bptr = PACKET_RX_START + 4 + start_time_l ; Hopefully back where we were before we went off on that verification rubbish :)
+						; NOTE: Above is a possible failure point
+						if tmpwd != 0 then
+	#IFDEF DEBUG_PJON_RECEIVE
+							sertxd("Sender info is still included", cr, lf)
+	#ENDIF
+							gosub read_lora
+							; inc counter3
+							dec bptr
+							@bptrinc = rtrn ; Copy sender id
+						endif
+
+						; Load the payload
+						for crc0 = 1 to start_time_h
+							gosub read_lora
+							; inc counter3
+							@bptrinc = rtrn
+						next crc0
+
+						; Calculate the checksum, load and compare it with the one in the packet
+						param1 = bptr - PACKET_RX_START ; Total length of everything up to now/
+						bptr = PACKET_RX_HEADER ; Check checksum type
+						tmpwd = @bptr & HEADER_CRC
+						bptr = PACKET_RX_START ; Setup for crc calc
+						if tmpwd != 0 then
+							; 32 bit checksum at the end
+	#IFDEF DEBUG_PJON_RECEIVE
+							sertxd("32 bit checksum calcs", cr, lf)
+	#ENDIF
+							gosub crc32_compute
+							gosub read_lora
+							; inc counter3
+							@bptrinc = rtrn
+							if crc3 = rtrn then
+								; First part matches
+								gosub read_lora
+								; inc counter3
+								@bptrinc = rtrn
+								if crc2 = rtrn then
+									; Second part matches
+									gosub read_lora
+									; inc counter3
+									@bptrinc = rtrn
+									if crc1 = rtrn then
+										; Third part matches
+										gosub read_lora
+										; inc counter3
+										@bptrinc = rtrn
+										if crc0 = rtrn then
+											; Entire checksum matches
+											; All good. Packet can be returned
+											goto correct_pjon_packet_rtrn ; Shared with crc8
+	#IFDEF DEBUG_PJON_RECEIVE
+										else
+											sertxd("CRC0 failed", cr, lf)
+	#ENDIF
+										endif
+	#IFDEF DEBUG_PJON_RECEIVE
+									else
+										sertxd("CRC1 failed", cr, lf)
+	#ENDIF
+									endif
+	#IFDEF DEBUG_PJON_RECEIVE
+								else
+									sertxd("CRC2 failed", cr, lf)
+	#ENDIF
+								endif
+	#IFDEF DEBUG_PJON_RECEIVE
+							else
+								sertxd("CRC3 failed", cr, lf)
+	#ENDIF
+							endif
+						else
+							; 8 bit checksum at the end
+	#IFDEF DEBUG_PJON_RECEIVE
+							sertxd("8 bit checksum calcs", cr, lf)
+	#ENDIF
+							; TODO: crc8 check
+							gosub crc8_compute
+							crc0 = rtrn
+							gosub read_lora
+							; inc counter3
+							@bptrinc = rtrn
+							if crc0 = rtrn then
+								; Checksum matches. All good
+								; All good. Packet can be returned
+								goto correct_pjon_packet_rtrn ; Shared with crc32
+	#IFDEF DEBUG_PJON_RECEIVE
+							else
+								sertxd("CRC Failed", cr, lf)
+	#ENDIF
+							endif
+						endif
+	#IFDEF DEBUG_PJON_RECEIVE
+					else
+						sertxd("PKT incorrect total length", cr, lf)
+	#ENDIF
+					endif
+						
+	#IFDEF DEBUG_PJON_RECEIVE
+				else
+					; Checksums do not match. Invalid packet.
+					sertxd("PKT invalid header chksum: ", cr, lf)
+	#ENDIF
+				endif
+	#IFDEF DEBUG_PJON_RECEIVE
+			else
+				; Packet is not addressed to us.
+				sertxd("PKT invalid addr: ", #rtrn, cr, lf)
+	#ENDIF
+			endif
+	#IFDEF DEBUG_PJON_RECEIVE
+		else
+			; Packet is too short to contain a header.
+			sertxd("PKT no head: ", #total_length, cr, lf)
+	#ENDIF
+		endif
+	endif
+	rtrn = PJON_INVALID_PACKET
+	return
+#ENDIF
+
+correct_pjon_packet_rtrn:
+	; Handles correct packet return from read_pjon_packet.
+	; Do not call from anywhere else.
+	rtrn = start_time_h ; Payload length
+	bptr = PACKET_RX_START + 4
+
+	; Load the sender id and move bptr to the correct start pos if sender id present
+	param1 = 0
+	if start_time_l != 0 then
+		param1 = @bptrinc
+	endif
+	#IFDEF DEBUG_PJON_RECEIVE
+	sertxd("Received packet successfully",cr, lf)
+	#ENDIF
+	return
+
+; CRC8 implementation from the Arduino PJON library
+crc8_compute:
+	; Computes the crc8 of a given set of bytes.
+	; bptr points to the first byte.
+	; param1 is the length
+	; rtrn is the crc
+	; bptr points to the byte after.
+	; Variables read: none
+	; Variables modified: counter2, tmpwd, rtrn, param1, mask, counter, bptr
+	rtrn = 0
+	mask = param1
+	for counter = 1 to mask
+		param1 = @bptrinc
+		gosub crc8_roll
+	next counter
+	
+	return
+	
+crc8_roll:
+	; Performs a roll.
+	; param1 is the input byte
+	; rtrn is the current crc
+	;
+	; Variables read: none
+	; Variables modified: counter2, tmpwd, rtrn, param1
+	for counter2 = 8 to 1 step -1
+		tmpwd = rtrn ^ param1
+		tmpwd = tmpwd & 0x01
+		rtrn = rtrn / 2
+		if tmpwd != 0 then
+			rtrn = rtrn ^ 0x97
+		endif
+		param1 = param1 / 2
+	next counter2
+	return
+
+crc32_compute:
+	; Computes the crc32 of the given bytes
+	; bptr points to the first byte.
+	; param1 is the length
+	; the crc is contained in crc3, crc2, crc1, crc0 after
+	; bptr points to the byte after.
+	;
+	; Variables read: none
+	; Variables modified: crc0, crc1, crc2, crc3, counter, param1, counter2, tmpwd, mask, level,
+	;                     bptr
+	crc0 = 0xFF ; Lowest byte
+	crc1 = 0xFF
+	crc2 = 0xFF
+	crc3 = 0xFF ; Highest byte
+
+	for counter = param1 to 1 step -1
+		crc0 = crc0 ^ @bptrinc
+		for counter2 = 0 to 7
+			; Right bitshift everything by 1
+			; crc >>= 1
+			tmpwd = crc3 & 1
+				crc3 = crc3 / 2
+
+			mask = crc2 & 1
+        		crc2 = crc2 / 2
+        		if tmpwd != 0 then
+            		crc2 = crc2 + 0x80
+			endif
+		
+			tmpwd = crc1 & 1
+			crc1 = crc1 / 2
+        		if mask != 0 then
+            		crc1 = crc1 + 0x80
+			endif
+
+			level = crc0 & 1
+        		crc0 = crc0 / 2
+        		if tmpwd != 0 then
+            		crc0 = crc0 + 0x80
+			endif
+
+			; XOR the crc if needed
+			if level != 0 then
+				; crc = (crc >> 1) ^ 0xEDB88320
+				crc3 = crc3 ^ 0xED
+				crc2 = crc2 ^ 0xB8
+				crc1 = crc1 ^ 0x83
+				crc0 = crc0 ^ 0x20
+			endif
+		next counter2
+	next counter
+	
+	; Invert everything and we are done
+	crc3 = crc3 ^ 0xFF ; ~ is not supported on M2 parts
+	crc2 = crc2 ^ 0xFF
+	crc1 = crc1 ^ 0xFF
+	crc0 = crc0 ^ 0xFF
+	return

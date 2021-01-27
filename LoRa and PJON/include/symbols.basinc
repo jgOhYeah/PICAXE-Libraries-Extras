@@ -1,0 +1,52 @@
+; symbols.basinc
+; Definitions to be used in other files
+; Jotham Gates
+; Created 22/11/2020
+; Modified 25/01/2020
+; https://github.com/jgOhYeah/PICAXE-Libraries-Extras
+
+; Pins
+; Serial
+; RX = C.5
+; TX = B.0
+; LoRa module
+symbol SS = C.0 ; Current (keep the B register free for other stuff, which seems to have more features in terms of adc)
+symbol SCK = C.1
+symbol MOSI = C.2
+symbol MISO = pinC.3
+symbol RST = C.4
+symbol DIO0 = pinB.5 ; High when a packet has been received
+
+; Variables
+symbol mask = b1
+symbol level = b2
+symbol counter = b3
+symbol counter2 = b4
+symbol total_length = b5
+symbol s_transfer_storage = b6 ; Saves param1 duing LoRa spiing
+symbol crc0 = b7 ; crcs can be used whenever a crc calculation is not required
+symbol crc1 = b8
+symbol crc2 = b9
+symbol crc3 = b10
+symbol counter3 = b11
+; b12, b13, b1, b15, b16, b17, b18, b19 are free
+symbol start_time = w10
+symbol start_time_h = b21
+symbol start_time_l = b20
+symbol tmpwd = w11
+symbol param1 = b24
+symbol param2 = b25
+symbol rtrn = w13
+
+symbol LORA_TIMEOUT = 2 ; Number of seconds after which it is presumed the module has dropped out
+                        ; due to a dodgy connection or breadboard and should be reset.
+
+#DEFINE LORA_RECEIVED DIO0 = 1 ; Macro to simplify checking if a packet has been received.
+
+symbol LORA_RECEIVED_CRC_ERROR = 65535 ; Says there is a CRC error if returned by setup_lora_read
+symbol PJON_INVALID_PACKET = 65534 ; Says the packet is invalid, not a PJON packet, or not addressed to us
+
+symbol MY_ID = 0x3B ; PJON id of this device
+symbol UPRSTEAM_ADDRESS = 255 ; Address to send things to using PJON
+
+#DEFINE FILE_SYMBOLS_INCLUDED ; Prove this file is included properly

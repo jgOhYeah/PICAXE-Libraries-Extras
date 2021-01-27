@@ -1,0 +1,676 @@
+; LoRa.basinc
+; Attempt at talking to an SX1278 LoRa radio module using picaxe M2 parts.
+; Heavily based on the Arduino LoRa library found here: https://github.com/sandeepmistry/arduino-LoRa
+; Jotham Gates
+; Created 22/11/2020
+; Modified 25/01/2021
+; https://github.com/jgOhYeah/PICAXE-Libraries-Extras
+
+; Symbols only used for LoRa
+; Registers
+symbol REG_FIFO = 0x00
+symbol REG_OP_MODE = 0x01
+symbol REG_FRF_MSB = 0x06
+symbol REG_FRF_MID = 0x07
+symbol REG_FRF_LSB = 0x08
+symbol REG_PA_CONFIG = 0x09
+symbol REG_OCP = 0x0b
+symbol REG_LNA = 0x0c
+symbol REG_FIFO_ADDR_PTR = 0x0d
+symbol REG_FIFO_TX_BASE_ADDR = 0x0e
+symbol REG_FIFO_RX_BASE_ADDR = 0x0f
+symbol REG_FIFO_RX_CURRENT_ADDR = 0x10
+symbol REG_IRQ_FLAGS = 0x12
+symbol REG_RX_NB_BYTES = 0x13
+symbol REG_PKT_SNR_VALUE = 0x19
+symbol REG_PKT_RSSI_VALUE = 0x1a
+symbol REG_MODEM_CONFIG_1 = 0x1d
+symbol REG_MODEM_CONFIG_2 = 0x1e
+symbol REG_PREAMBLE_MSB = 0x20
+symbol REG_PREAMBLE_LSB = 0x21
+symbol REG_PAYLOAD_LENGTH = 0x22
+symbol REG_MODEM_CONFIG_3 = 0x26
+symbol REG_FREQ_ERROR_MSB = 0x28
+symbol REG_FREQ_ERROR_MID = 0x29
+symbol REG_FREQ_ERROR_LSB = 0x2a
+symbol REG_RSSI_WIDEBAND = 0x2c
+symbol REG_DETECTION_OPTIMIZE = 0x31
+symbol REG_INVERTIQ = 0x33
+symbol REG_DETECTION_THRESHOLD = 0x37
+symbol REG_SYNC_WORD = 0x39
+symbol REG_INVERTIQ2 = 0x3b
+symbol REG_DIO_MAPPING_1 = 0x40
+symbol REG_VERSION = 0x42
+symbol REG_PA_DAC = 0x4d
+
+; Modes
+symbol MODE_LONG_RANGE_MODE = 0x80
+symbol MODE_SLEEP = 0x00
+symbol MODE_STDBY = 0x01
+symbol MODE_TX = 0x03
+symbol MODE_RX_CONTINUOUS = 0x05
+symbol MODE_RX_SINGLE = 0x06
+
+; PA Config
+symbol PA_BOOST = 0x80
+
+; IRQ masks
+symbol IRQ_TX_DONE_MASK = 0x08
+symbol IRQ_PAYLOAD_CRC_ERROR_MASK = 0x20
+symbol IRQ_RX_DONE_MASK = 0x40
+
+; Other
+symbol MAX_PKT_LENGTH = 255
+
+; Check the correct files have been included to reduce cryptic error messages.
+#IFNDEF FILE_SYMBOLS_INCLUDED
+	#ERROR "'symbols.basinc' is not included. Please make sure it included above 'LoRa.basinc'."
+#ENDIF
+#IFNDEF FILE_GENERATED_INCLUDED
+	#ERROR "'generated.basinc' is not included. Please make sure it included above 'LoRa.basinc'."
+#ENDIF
+
+begin_lora:
+	; Sets the module up.
+	; Initialises the LoRa module (begin)
+	; Usage:
+	;	gosub begin_lora
+	;
+	; Variables read: none
+	; Variables modified: rtrn, tmpwd, counter, mask, s_transfer_storage, param1, param2, level
+
+	high SS
+	
+	; Reset the module
+	low RST
+	pause 10
+	high RST
+	
+	; Begin spi
+	; Check version
+	; uint8_t version = readRegister(REG_VERSION);
+  	; if (version != 0x12) {
+      ;     return 0;
+	; }
+	param1 = REG_VERSION
+	gosub read_register
+	if rtrn != 0x12 then
+		; sertxd("Got: ",#rtrn," ")
+		rtrn = 0
+		return
+	endif
+	
+	; put in sleep mode
+	gosub sleep_lora
+	
+	; set frequency
+	; setFrequency(frequency);
+	gosub set_frequency
+
+	; set base addresses
+	; writeRegister(REG_FIFO_TX_BASE_ADDR, 0);
+	param1 = REG_FIFO_TX_BASE_ADDR
+	param2 = 0
+	gosub write_register
+	
+	; writeRegister(REG_FIFO_RX_BASE_ADDR, 0);
+	param1 = REG_FIFO_RX_BASE_ADDR
+	gosub write_register
+
+	; set LNA boost
+	; writeRegister(REG_LNA, readRegister(REG_LNA) | 0x03);
+	param1 = REG_LNA
+	gosub read_register ; Should not change param1
+	param2 = rtrn | 0x03
+	gosub write_register
+	
+	; set auto AGC
+	; writeRegister(REG_MODEM_CONFIG_3, 0x04);
+	param1 = REG_MODEM_CONFIG_3
+	param2 = 0x04
+	gosub write_register
+
+	; set output power to 17 dBm
+	; setTxPower(17);
+	param1 = 17
+	gosub set_tx_power
+
+	; put in standby mode
+	gosub idle_lora
+
+	; Success. Return
+	rtrn = 1
+	return
+
+#IFDEF ENABLE_LORA_TRANSMIT
+begin_lora_packet:
+	; Call this to set the module up to send a packet.
+	; Only supports explicit header mode for now.
+	; Usage:
+	;	gosub begin_packet
+	;
+	; Variables read: none
+	; Variables modified: rtrn, tmpwd, counter, mask, s_transfer_storage, param1, param2
+
+	; Check if the radio is busy and return 0 if so.
+	; As we are always waiting until the packet has been transmitted, we can not do this and save
+	; program memory.
+	; gosub is_transmitting
+	; if rtrn = 1 then
+	; 	rtrn = 0
+	; 	return
+	; endif
+
+	; Put into standby mode
+	gosub idle_lora
+	
+	; Explicit header mode
+	; writeRegister(REG_MODEM_CONFIG_1, readRegister(REG_MODEM_CONFIG_1) & 0xfe);
+	param1 = REG_MODEM_CONFIG_1
+	gosub read_register
+	param2 = rtrn & 0xfe
+	gosub write_register
+	
+	; reset FIFO address and paload length
+  	; writeRegister(REG_FIFO_ADDR_PTR, 0);
+	param1 = REG_FIFO_ADDR_PTR
+	param2 = 0
+	gosub write_register
+	
+	; writeRegister(REG_PAYLOAD_LENGTH, 0);
+	param1 = REG_PAYLOAD_LENGTH
+	gosub write_register
+	
+	rtrn = 1
+	return
+	
+end_lora_packet:
+	; Finalises the packet and instructs the module to send it.
+	; Waits until transmission is finished (async is treated as false).
+	; Usage:
+	;	gosub end_packet
+	;
+	; Variables read: none
+	; Variables modified: rtrn, tmpwd, counter, mask, s_transfer_storage, param1, param2,
+	;                     start_time,
+
+	; put in TX mode
+	; writeRegister(REG_OP_MODE, MODE_LONG_RANGE_MODE | MODE_TX);
+	param1 = REG_OP_MODE
+	param2 = MODE_LONG_RANGE_MODE | MODE_TX
+	gosub write_register
+	
+	; Wait for TX done
+	; while ((readRegister(REG_IRQ_FLAGS) & IRQ_TX_DONE_MASK) == 0) { yield(); }
+	start_time = time
+end_packet_wait:
+	tmpwd = time - start_time
+	if tmpwd > LORA_TIMEOUT then ; On a breadboard, occasionally the spi seems to drop out and the chip gets stuck here.
+		rtrn = 0
+		return
+	endif
+	param1 = REG_IRQ_FLAGS
+	gosub read_register
+	tmpwd = rtrn & IRQ_TX_DONE_MASK
+	if tmpwd = 0 then end_packet_wait
+	
+	; clear IRQ's
+	; writeRegister(REG_IRQ_FLAGS, IRQ_TX_DONE_MASK);
+	param1 = REG_IRQ_FLAGS
+	param2 = IRQ_TX_DONE_MASK
+	gosub write_register
+	
+	rtrn = 1
+	return
+
+write_lora:
+	; Writes a string starting at bptr that is param1 chars long
+	; Usage:
+	;     bptr = 28 ; First character in string / char array is at the byte after b27 (treating
+	;               ; general purpose memory as a char array).
+	;     param1 = 5 ; 5 bytes to add to send.
+	;     gosub write_lora
+	;
+	; Variables read: param1, bptr
+	; Variables modified: rtrn, tmpwd, counter, mask, s_transfer_storage, param1, param2, bptr,
+	;                     level, total_length, counter2
+	
+	level = param1
+	
+	param1 = REG_PAYLOAD_LENGTH
+	gosub read_register
+	
+	; Check size
+	total_length = rtrn + level
+	if total_length > MAX_PKT_LENGTH then
+		level = MAX_PKT_LENGTH - rtrn
+	endif
+	
+	; Write data
+	for counter2 = 1 to level
+		param1 = REG_FIFO
+		param2 = @bptrinc
+		; sertxd("W: ", #param2,cr, lf)
+		gosub write_register
+	next counter2
+	; sertxd(cr,lf)
+	
+	; Update length
+	param1 = REG_PAYLOAD_LENGTH
+	param2 = total_length
+	gosub write_register
+	
+	rtrn = level
+	return
+
+#rem
+is_transmitting:
+	; Returns 1 if the transmitter is transmitting and 0 otherwise.
+	; Note: Is this required seeing as we always wait for transmissions to be done?
+	; return (readRegister(REG_OP_MODE) & MODE_TX) == MODE_TX)
+	; Does not preserve param1 or param2
+	;
+	; Variables read: none
+	; Variables modified: rtrn, tmpwd, counter, mask, s_transfer_storage, param1, param2
+	param1 = REG_OP_MODE
+	gosub read_register
+	rtrn = rtrn & MODE_TX
+	if rtrn = MODE_TX then
+		rtrn = 1
+		return
+	endif
+
+	; IRQ Stuff
+	; if (readRegister(REG_IRQ_FLAGS) & IRQ_TX_DONE_MASK) {
+	;	clear IRQ's
+	;	writeRegister(REG_IRQ_FLAGS, IRQ_TX_DONE_MASK);
+	; }
+	param1 = REG_IRQ_FLAGS
+	gosub read_register
+	rtrn = rtrn & IRQ_TX_DONE_MASK
+	if rtrn != 0 then
+		param2 = IRQ_TX_DONE_MASK
+		gosub write_register
+	endif
+	
+	rtrn = 0
+	return
+#endrem
+#ENDIF
+
+#IFDEF ENABLE_LORA_RECEIVE
+setup_lora_receive:
+	; Puts the LoRa module in receiving (higher power draw) mode.
+	; Based off void LoRaClass::receive(int size), but no params as always using DI0 pin.
+	;
+	; Variables read: none
+	; Variables modified: rtrn, tmpwd, counter, mask, s_transfer_storage, param1, param2
+
+	; writeRegister(REG_DIO_MAPPING_1, 0x00); // DIO0 => RXDONE
+	param1 = REG_DIO_MAPPING_1
+	param2 = 0x00
+	gosub write_register
+	
+	; Note: As the size is assumed to always be 0 as the DIO0 pin is used, explicit mode only is implemented
+	; if (size > 0) {
+	;	implicitHeaderMode();
+	;	writeRegister(REG_PAYLOAD_LENGTH, size & 0xff);
+	; } else {
+	;	explicitHeaderMode();
+	; }
+
+	; Explicit header mode function:
+	; writeRegister(REG_MODEM_CONFIG_1, readRegister(REG_MODEM_CONFIG_1) & 0xfe);
+	param1 = REG_MODEM_CONFIG_1
+	gosub read_register
+	param2 = rtrn & 0xFE
+	gosub write_register
+
+	; writeRegister(REG_OP_MODE, MODE_LONG_RANGE_MODE | MODE_RX_CONTINUOUS);
+	param1 = REG_OP_MODE
+	param2 = MODE_LONG_RANGE_MODE | MODE_RX_CONTINUOUS
+	gosub write_register
+	return
+
+setup_lora_read:
+	; Call this when the dio0 pin on the module is high.
+	; Based off handleDio0Rise()
+	; Returns the packet length is valid or LORA_RECEIVED_CRC_ERROR
+	;
+	; Variables read: none
+	; Variables modified: rtrn, tmpwd, counter, mask, s_transfer_storage, param1, param2, level
+	; int irqFlags = readRegister(REG_IRQ_FLAGS);
+	; writeRegister(REG_IRQ_FLAGS, irqFlags); // clear IRQ's
+	param1 = REG_IRQ_FLAGS
+	gosub read_register
+	param2 = rtrn
+	gosub write_register ; rtrn will be overwritten, so use param2 afterwards as needed
+	
+	; if ((irqFlags & IRQ_PAYLOAD_CRC_ERROR_MASK) == 0) {
+	tmpwd = param2 & IRQ_PAYLOAD_CRC_ERROR_MASK
+	if tmpwd = 0 then
+		; Asyncronous tx not implemented, so no checking if it is not because of the rx done flag.
+		; We have received a packet.
+		; Implicit header mode is not implemented. Will need to change registers here if it is.
+		; int packetLength = _implicitHeaderMode ? readRegister(REG_PAYLOAD_LENGTH) : readRegister(REG_RX_NB_BYTES); Read packet length
+		param1 = REG_RX_NB_BYTES
+		gosub read_register
+		level = rtrn
+		
+		; Set FIFO address to current RX address
+      	; writeRegister(REG_FIFO_ADDR_PTR, readRegister(REG_FIFO_RX_CURRENT_ADDR));
+		param1 = REG_FIFO_RX_CURRENT_ADDR
+		gosub read_register
+		param1 = REG_FIFO_ADDR_PTR
+		param2 = rtrn
+		gosub write_register
+		;counter3 = rtrn
+		rtrn = level ; Return the length of the packet
+	else
+		rtrn = LORA_RECEIVED_CRC_ERROR
+
+	endif
+	return
+
+read_lora:
+	; Reads the next byte from the receiver.
+	; Currently does not do any checking if too many bytes have been read.
+	; TODO: Checking if too many bytes have been read.
+	;
+	; Variables read: none
+	; Variables modified: rtrn, tmpwd, counter, mask, s_transfer_storage, param1, param2
+	param1 = REG_FIFO
+	gosub read_register
+	; sertxd("Reading: ", #rtrn, cr, lf)
+	return
+
+packet_rssi:
+	; Returns the RSSI in 2's complement
+	;
+	; Variables read: none
+	; Variables modified: rtrn, tmpwd, counter, mask, s_transfer_storage, param1, param2
+	; return (readRegister(REG_PKT_RSSI_VALUE) - (_frequency < 868E6 ? 164 : 157));
+	param1 = REG_PKT_RSSI_VALUE
+	gosub read_register
+	
+	#IF LORA_FREQ < 868000000
+	rtrn = rtrn - 164
+	#ELSE
+	rtrn = rtrn - 157
+	#ENDIF
+	return
+	
+packet_snr:
+	; Returns the SNR in 2's complement * 4
+	;
+	; Variables read: none
+	; Variables modified: rtrn, tmpwd, counter, mask, s_transfer_storage, param1
+	param1 = REG_PKT_SNR_VALUE
+	gosub read_register
+	return
+	
+#ENDIF
+
+set_spreading_factor:
+	; Sets the spreading factor. If not called, defaults to 7.
+	; Spread factor 6 is not supported as implicit header mode is not enabled.
+	; Spread factor and LDO flag are hardcoded in symbols.basinc as symbols LORA_SPREADING_FACTOR and LORA_LDO_ON
+	; Usage:
+	;	gosub set_spreading_factor
+	;
+	; Variables read: none
+	; Variables modified: rtrn, tmpwd, counter, mask, s_transfer_storage, param1, param2
+
+#IF LORA_SPREADING_FACTOR < 7
+	#ERROR "Spread factors less than 7 are not currently supported"
+#ELSEIF LORA_SPREADING_FACTOR > 12
+	#ERROR "Spread factors greater than 12 are not currently supported"
+#ENDIF
+	; TODO: Spread factor 6 implementation
+	; if param1 = 6 then
+	; Spread factor 6 (not implemented):
+	; writeRegister(REG_DETECTION_OPTIMIZE, 0xc5);
+	; writeRegister(REG_DETECTION_THRESHOLD, 0x0c);
+	
+	; All other spread factors
+	; writeRegister(REG_DETECTION_OPTIMIZE, 0xc3);
+	param1 = REG_DETECTION_OPTIMIZE
+	param2 = 0xc3
+	gosub write_register
+	
+	; writeRegister(REG_DETECTION_THRESHOLD, 0x0a);
+	param1 = REG_DETECTION_THRESHOLD
+	param2 = 0x0a
+	gosub write_register
+	
+	; writeRegister(REG_MODEM_CONFIG_2, (readRegister(REG_MODEM_CONFIG_2) & 0x0f) | ((sf << 4) & 0xf0));
+	param1 = REG_MODEM_CONFIG_2
+	gosub read_register
+	param2 = rtrn & 0x0f
+	tmpwd = LORA_SPREADING_FACTOR * 16 & 0xf0
+	param2 = param2 | tmpwd
+	gosub write_register
+	
+	; setLdoFlag();
+	gosub set_ldo_flag
+	
+	return
+
+set_ldo_flag:
+	; param1 contains the spreading factor
+	; Uses the LORA_LDO_ON symbol for now. Use the included python file to calculate if this should
+	; be 0 (false) or 1 (true).
+	;
+	; Variables read: none
+	; Variables modified: rtrn, tmpwd, counter, mask, s_transfer_storage, param1, param2
+	param1 = REG_MODEM_CONFIG_3
+	gosub read_register
+	
+	param2 = rtrn & %11110111 ; Clear the ldo bit in case it needs to be cleared
+	;tmpwd = LORA_LDO_ON
+#IF LORA_LDO_ON = 1
+	; if tmpwd = 1 then
+	param2 = param2 | %1000 ; Set the bit
+	; endif
+#ENDIF
+	gosub write_register
+	
+	return
+
+set_tx_power:
+	; PA Boost only implemented to save memory (not RFO)
+	; Does NOT preserve param1!
+	;
+	; Variables read: param1
+	; Variables modified: rtrn, tmpwd, counter, mask, s_transfer_storage, param1, param2, level
+
+	level = param1 ; Need to save param 1 for later
+	if level > 17 then
+		if level > 20 then
+			level = 20
+		endif
+		
+		level = level - 3 ; Map 18 - 20 to 15 - 17
+		
+		; High Power +20 dBm Operation (Semtech SX1276/77/78/79 5.4.3.)
+      	; writeRegister(REG_PA_DAC, 0x87);
+		param1 = REG_PA_DAC
+		param2 = 0x87
+		gosub write_register
+		
+      	; setOCP(140);
+		param1 = 140
+		gosub set_OCP
+	else
+		if level < 2 then
+			level = 2
+		endif
+		
+		; Default value PA_HF/LF or +17dBm
+      	; writeRegister(REG_PA_DAC, 0x84);
+		param1 = REG_PA_DAC
+		param2 = 0x84
+		gosub write_register
+		
+      	; setOCP(100);
+		param1 = 100
+		gosub set_OCP
+	endif
+	
+	; writeRegister(REG_PA_CONFIG, PA_BOOST | (level - 2));
+	param1 = REG_PA_CONFIG
+	param2 = level - 2
+	param2 = PA_BOOST | param2
+	gosub write_register
+
+	return
+
+set_OCP:
+	; Sets the overcurrent protection
+	; param1: mA
+	; Does not preserve param1
+	;
+	; Variables read: param1
+	; Variables modified: rtrn, tmpwd, counter, mask, s_transfer_storage, param1, param2
+	tmpwd = 27
+	
+	if param1 <= 120 then
+		tmpwd = param1 - 45
+		tmpwd = tmpwd / 5
+	elseif param1 <= 240 then
+		tmpwd = param1 + 30
+		tmpwd = tmpwd / 10
+	endif
+	
+	param1 = REG_OCP
+	param2 = 0x1f & tmpwd
+	param2 = 0x20 | param2
+	gosub write_register
+	return
+
+
+set_frequency:
+	; Sets the frequency using the LORA_FREQ_MSB, LORA_FREQ_MID and LORA_FREQ_LSB symbols.
+	; There should be a python script to calculate these.
+	;
+	; Variables read: none
+	; Variables modified: rtrn, tmpwd, counter, mask, s_transfer_storage, param1, param2
+	;
+	; uint64_t frf = ((uint64_t)frequency << 19) / 32000000;
+	; writeRegister(REG_FRF_MSB, (uint8_t)(frf >> 16));
+	param1 = REG_FRF_MSB
+	param2 = LORA_FREQ_MSB
+	gosub write_register
+	
+	; writeRegister(REG_FRF_MID, (uint8_t)(frf >> 8));
+	param1 = REG_FRF_MID
+	param2 = LORA_FREQ_MID
+	gosub write_register
+	
+	; writeRegister(REG_FRF_LSB, (uint8_t)(frf >> 0));
+	param1 = REG_FRF_LSB
+	param2 = LORA_FREQ_LSB
+	gosub write_register
+	return
+
+sleep_lora:
+	; Puts the LoRa module into sleep (low power) mode.
+	;
+	; Variables read: none
+	; Variables modified: rtrn, tmpwd, counter, mask, s_transfer_storage, param1, param2
+	;
+	; writeRegister(REG_OP_MODE, MODE_LONG_RANGE_MODE | MODE_SLEEP);
+	param1 = REG_OP_MODE
+	param2 = MODE_LONG_RANGE_MODE | MODE_SLEEP
+	gosub write_register
+	return
+
+idle_lora:
+	; Puts the LoRa module into idle (default power level) mode.
+	;
+	; Variables read: none
+	; Variables modified: rtrn, tmpwd, counter, mask, s_transfer_storage, param1, param2
+	;
+	; writeRegister(REG_OP_MODE, MODE_LONG_RANGE_MODE | MODE_STDBY);
+	param1 = REG_OP_MODE
+	param2 = MODE_LONG_RANGE_MODE | MODE_STDBY
+	gosub write_register
+	return
+	
+read_register:
+	; Reads a LoRa register
+	;
+	; Variables read: param1
+	; Variables modified: rtrn, tmpwd, counter, mask, s_transfer_storage, param1, param2
+	param1 = param1 & 0x7f
+	param2 = 0
+	gosub single_transfer
+	; single_transfer will have set rtrn
+	return
+
+write_register:
+	; Writes to a register in the transceiver
+	;
+	; Variables read: param1, param2
+	; Variables modified: rtrn, tmpwd, counter, mask, s_transfer_storage, param1
+
+	; singleTransfer(address | 0x80, value);
+	param1 = param1 | 0x80
+	; param2 = value is already set
+	gosub single_transfer
+	return
+
+single_transfer:
+	; Performs a single transfer operation to and from the LoRa module
+	; param1 is the first byte
+	; param2 is the second byte
+	; rtrn is the second byte returned
+	;
+	; Variables read: param1, param2
+	; Variables modified: rtrn, tmpwd, counter, mask, s_transfer_storage
+	low SS
+	; param1 is already set
+	s_transfer_storage = param1 ; so param1can be restored later
+	gosub spi_byte
+	param1 = param2
+	gosub spi_byte
+	; rtrn is already set
+	param1 = s_transfer_storage
+	high SS
+	return
+	
+spi_byte:
+	; Sends and receives a byte over spi. Based off the examples in the manual, except full duplex.
+	; The clock frequency is very roughly 1.58kHz at 32MHz clock.
+	; Usage:
+	;     param1 = byte to send
+	;     gosub spi_byte
+	;     rtrn = received byte
+	;
+	; Variables read: param1
+	; Variables modified: rtrn, tmpwd, counter, mask
+	rtrn = 0
+	tmpwd = param1
+	for counter = 1 to 8 ; number of bits
+		mask = tmpwd & 128 ; mask MSB
+		; Send data
+		if mask = 0 then ; Set MOSI
+			low MOSI
+		else
+			high MOSI
+		endif
+		
+		; Receive data
+		rtrn = rtrn * 2 ; shift left as MSB first
+		if MISO != 0 then
+			inc rtrn
+		endif
+		
+		; pulsout SCK,80 ; pulse clock for 800us (80). Slow down to allow the arduino to detect it
+		pulsout SCK, 1 ; Faster version for normal use.
+		
+		tmpwd = tmpwd * 2 ; shift variable left for MSB
+		next counter
+	return
+
+#DEFINE FILE_LORA_INCLUDED ; Prove this file has been included correctly
