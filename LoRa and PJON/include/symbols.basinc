@@ -41,7 +41,8 @@ symbol rtrn = w13
 symbol LORA_TIMEOUT = 2 ; Number of seconds after which it is presumed the module has dropped out
                         ; due to a dodgy connection or breadboard and should be reset.
 
-#DEFINE LORA_RECEIVED DIO0 = 1 ; Macro to simplify checking if a packet has been received.
+; Macro to simplify checking if a packet has been received.
+#DEFINE LORA_RECEIVED DIO0 = 1
 
 symbol LORA_RECEIVED_CRC_ERROR = 65535 ; Says there is a CRC error if returned by setup_lora_read
 symbol PJON_INVALID_PACKET = 65534 ; Says the packet is invalid, not a PJON packet, or not addressed to us
