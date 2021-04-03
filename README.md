@@ -8,6 +8,19 @@ Some code and modules for interfacing a PICAXE microcontroller to an SX127* base
 
 Click [here](LoRa%20and%20PJON/README.md) for more info.
 
+## EEPROMTools
+A python script and PICAXE code to read and write to EEPROM chips and save and restore from binary files. These files can be edited using your favourite hex editor and downloaded from or uploaded to the EEPROM chip connected to a PICAXE microcontroller using the EEPROMTools.py script.
+
+### Example usage
+###### Reading
+```
+./EEPROMTools.py r test.bin # Reads bytes 0 to 1023 (defaults) into test.bin
+```
+###### Writing
+```
+./EEPROMTools.py w 255 test.bin # Writes the first 255 bytes of test.bin into the first 255 bytes of the eeprom chip.
+```
+
 ## Python Preprocessor
 Implementation of a very simple and limited preprocessor for the PICAXE compiler.
 
