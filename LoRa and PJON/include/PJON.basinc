@@ -60,12 +60,16 @@ symbol HEADER_MODE = %00000001
 #IFDEF ENABLE_PJON_TRANSMIT
 begin_pjon_packet:
 	; Sets bptr to the correct location to start writing data
+	; Maximum stack depth used: 0
+
 	bptr = PACKET_TX_START + PACKET_HEAD_LENGTH
 	return
 
 end_pjon_packet:
 	; Finalises the packet, writes the header and sends it using LoRa radio
 	; param1 contains the id
+	; Maximum stack depth used: 5
+	
 	level = bptr
 	param2 = bptr - PACKET_TX_START + 4 ; Length of packet with the crc bytes
 	gosub write_pjon_header
@@ -80,7 +84,7 @@ end_pjon_packet:
 	@bptrinc = crc0
 	
 	; Send the packet
-	gosub begin_lora_packet
+	gosub begin_lora_packet ; Stack is 5
 	param1 = bptr - PACKET_TX_START
 	bptr = PACKET_TX_START
 	gosub write_lora
@@ -91,6 +95,8 @@ write_pjon_header:
 	; param1 contains the id
 	; param2 contains the length
 	; Afterwards, bptr is at the correct location to begin writing the packet contents.
+	; Maximum stack depth used: 2
+
 	bptr = PACKET_TX_START
 	@bptrinc = param1
 	@bptrinc = PACKET_HEADER
@@ -120,7 +126,7 @@ read_pjon_packet:
 	;                     level, rtrn, s_transfer_Storage, bptr, total_length, start_time,
 	;                     start_time_h, start_time_l, counter3 (in other words, everything defined
 	;                     as of when this was written)
-
+	; Maximum stack depth used: 3
 	gosub setup_lora_read
 	if rtrn != LORA_RECEIVED_CRC_ERROR then
 		total_length = rtrn
@@ -357,6 +363,8 @@ crc8_compute:
 	; bptr points to the byte after.
 	; Variables read: none
 	; Variables modified: counter2, tmpwd, rtrn, param1, mask, counter, bptr
+	; Maximum stack depth used: 1
+
 	rtrn = 0
 	mask = param1
 	for counter = 1 to mask
@@ -373,6 +381,8 @@ crc8_roll:
 	;
 	; Variables read: none
 	; Variables modified: counter2, tmpwd, rtrn, param1
+	; Maximum stack depth used: 0
+
 	for counter2 = 8 to 1 step -1
 		tmpwd = rtrn ^ param1
 		tmpwd = tmpwd & 0x01
@@ -394,6 +404,8 @@ crc32_compute:
 	; Variables read: none
 	; Variables modified: crc0, crc1, crc2, crc3, counter, param1, counter2, tmpwd, mask, level,
 	;                     bptr
+	; Maximum stack depth used: 0
+
 	crc0 = 0xFF ; Lowest byte
 	crc1 = 0xFF
 	crc2 = 0xFF

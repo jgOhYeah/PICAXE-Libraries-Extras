@@ -78,6 +78,7 @@ begin_lora:
 	;
 	; Variables read: none
 	; Variables modified: rtrn, tmpwd, counter, mask, s_transfer_storage, param1, param2, level
+	; Maximum stack depth used: 5
 
 	high SS
 	
@@ -151,6 +152,7 @@ begin_lora_packet:
 	;
 	; Variables read: none
 	; Variables modified: rtrn, tmpwd, counter, mask, s_transfer_storage, param1, param2
+	; Maximum stack depth used: 4
 
 	; Check if the radio is busy and return 0 if so.
 	; As we are always waiting until the packet has been transmitted, we can not do this and save
@@ -193,6 +195,7 @@ end_lora_packet:
 	; Variables read: none
 	; Variables modified: rtrn, tmpwd, counter, mask, s_transfer_storage, param1, param2,
 	;                     start_time,
+	; Maximum stack depth used: 3
 
 	; put in TX mode
 	; writeRegister(REG_OP_MODE, MODE_LONG_RANGE_MODE | MODE_TX);
@@ -305,6 +308,7 @@ setup_lora_receive:
 	;
 	; Variables read: none
 	; Variables modified: rtrn, tmpwd, counter, mask, s_transfer_storage, param1, param2
+	; Maximum stack depth used: 3
 
 	; writeRegister(REG_DIO_MAPPING_1, 0x00); // DIO0 => RXDONE
 	param1 = REG_DIO_MAPPING_1
@@ -339,6 +343,8 @@ setup_lora_read:
 	;
 	; Variables read: none
 	; Variables modified: rtrn, tmpwd, counter, mask, s_transfer_storage, param1, param2, level
+	; Maximum stack depth used: 3
+
 	; int irqFlags = readRegister(REG_IRQ_FLAGS);
 	; writeRegister(REG_IRQ_FLAGS, irqFlags); // clear IRQ's
 	param1 = REG_IRQ_FLAGS
@@ -379,6 +385,8 @@ read_lora:
 	;
 	; Variables read: none
 	; Variables modified: rtrn, tmpwd, counter, mask, s_transfer_storage, param1, param2
+	; Maximum stack depth used: 3
+
 	param1 = REG_FIFO
 	gosub read_register
 	; sertxd("Reading: ", #rtrn, cr, lf)
@@ -420,6 +428,7 @@ set_spreading_factor:
 	;
 	; Variables read: none
 	; Variables modified: rtrn, tmpwd, counter, mask, s_transfer_storage, param1, param2
+	; Maximum stack depth used: 4
 
 #IF LORA_SPREADING_FACTOR < 7
 	#ERROR "Spread factors less than 7 are not currently supported"
@@ -463,6 +472,8 @@ set_ldo_flag:
 	;
 	; Variables read: none
 	; Variables modified: rtrn, tmpwd, counter, mask, s_transfer_storage, param1, param2
+	; Maximum stack depth used: 3
+
 	param1 = REG_MODEM_CONFIG_3
 	gosub read_register
 	
@@ -590,7 +601,8 @@ idle_lora:
 	;
 	; Variables read: none
 	; Variables modified: rtrn, tmpwd, counter, mask, s_transfer_storage, param1, param2
-	;
+	; Maximum stack depth used: 3
+
 	; writeRegister(REG_OP_MODE, MODE_LONG_RANGE_MODE | MODE_STDBY);
 	param1 = REG_OP_MODE
 	param2 = MODE_LONG_RANGE_MODE | MODE_STDBY
@@ -602,6 +614,8 @@ read_register:
 	;
 	; Variables read: param1
 	; Variables modified: rtrn, tmpwd, counter, mask, s_transfer_storage, param1, param2
+	; Maximum stack depth used: 2
+
 	param1 = param1 & 0x7f
 	param2 = 0
 	gosub single_transfer
@@ -613,6 +627,7 @@ write_register:
 	;
 	; Variables read: param1, param2
 	; Variables modified: rtrn, tmpwd, counter, mask, s_transfer_storage, param1
+	; Maximum stack depth used: 2
 
 	; singleTransfer(address | 0x80, value);
 	param1 = param1 | 0x80
@@ -628,6 +643,7 @@ single_transfer:
 	;
 	; Variables read: param1, param2
 	; Variables modified: rtrn, tmpwd, counter, mask, s_transfer_storage
+	; Maximum stack depth used: 1
 	low SS
 	; param1 is already set
 	s_transfer_storage = param1 ; so param1can be restored later
