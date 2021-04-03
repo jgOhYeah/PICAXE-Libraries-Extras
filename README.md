@@ -14,7 +14,7 @@ A python script and PICAXE code to read and write to EEPROM chips and save and r
 ### Example usage
 ###### Reading
 ```
-./EEPROMTools.py r test.bin # Reads bytes 0 to 1023 (defaults) into test.bin
+./EEPROMTools.py r test.bin # Reads bytes 0 to 2047 (defaults) into test.bin
 ```
 ###### Writing
 ```

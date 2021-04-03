@@ -19,7 +19,7 @@ def print_help():
 Where:
     MODE is read or write (r/w or read/write)
     START is the start address (optional, default 0)
-    END is the inclusive end address (optional, default 1023)
+    END is the inclusive end address (optional, default 2048)
     FILENAME is the file to read or write (optional, default EEPROM.bas)
 
 Tool for uploading and downloading data from eeproms connected to picaxe
@@ -121,7 +121,7 @@ if __name__ == "__main__":
     # Default settings
     read = True
     start_addr = 0
-    end_addr = 1023
+    end_addr = 2047
     filename = "EEPROM.bin"
 
     if len(sys.argv) == 1:
