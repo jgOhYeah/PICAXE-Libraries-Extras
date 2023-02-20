@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 # Calculates the required calibration factor for a voltage divider to get a number in units using integers.
 # Designed for expressions like voltage = adc_reading * numerator / denominator.
 # This aims to calculate the most accurate numerator and denominator, with the restriction that the
@@ -31,7 +32,7 @@ r2 = 5583
 # Stuff relating to how the microcontroller is set up
 bit_depth = 10 # readadc10 is 10 bit, readadc is 8 bit
 #adc_ref = 2.048
-adc_ref = 3.128 # Supply voltage
+adc_ref = 0.93 # Supply voltage
 word_size = 16 # Number of bits to play around with before we start to get overflow.
 voltage_multiplier = 10 # 1 for whole Vs, 10 so 0.1V steps...
 temperature_multiplier = 10 # 1 for whole degrees, 10 for 0.1 degrees...

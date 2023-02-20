@@ -12,6 +12,7 @@ import time
 
 ser = serial.Serial("/dev/ttyUSB0", 38400)
 sleep_time = 0.2 # Time so the interpretor in the PICAXE can keep up.
+small_sleep_time = 0.01
 acknowledge = b'\x01' # Char to receive
 def print_help():
     print("""EEPROMTools.py MODE [[[START]] [END]] [FILENAME]
@@ -79,7 +80,7 @@ def write_memory(start: int, end:int, data: bytearray) -> None:
     print("Sent params")
     for i in range(length):
         ser.read()
-        time.sleep(sleep_time)
+        time.sleep(small_sleep_time)
         ser.write(data[i].to_bytes(1, 'little')) # Because 1 byte, endianness doesn't matter
         print(".", end="", flush=True)
     
