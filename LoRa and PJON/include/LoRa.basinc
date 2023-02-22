@@ -3,7 +3,7 @@
 ; Heavily based on the Arduino LoRa library found here: https://github.com/sandeepmistry/arduino-LoRa
 ; Jotham Gates
 ; Created 22/11/2020
-; Modified 25/01/2021
+; Modified 22/02/2023
 ; https://github.com/jgOhYeah/PICAXE-Libraries-Extras
 
 ; Symbols only used for LoRa
@@ -70,6 +70,7 @@ symbol MAX_PKT_LENGTH = 255
 	#ERROR "'generated.basinc' is not included. Please make sure it included above 'LoRa.basinc'."
 #ENDIF
 
+#IFNDEF DISABLE_LORA_SETUP
 begin_lora:
 	; Sets the module up.
 	; Initialises the LoRa module (begin)
@@ -142,6 +143,8 @@ begin_lora:
 	; Success. Return
 	rtrn = 1
 	return
+
+#ENDIF
 
 #IFDEF ENABLE_LORA_TRANSMIT
 begin_lora_packet:
@@ -419,6 +422,7 @@ packet_snr:
 	
 #ENDIF
 
+#IFNDEF DISABLE_LORA_SETUP
 set_spreading_factor:
 	; Sets the spreading factor. If not called, defaults to 7.
 	; Spread factor 6 is not supported as implicit header mode is not enabled.
@@ -583,6 +587,8 @@ set_frequency:
 	param2 = LORA_FREQ_LSB
 	gosub write_register
 	return
+
+#ENDIF
 
 sleep_lora:
 	; Puts the LoRa module into sleep (low power) mode.

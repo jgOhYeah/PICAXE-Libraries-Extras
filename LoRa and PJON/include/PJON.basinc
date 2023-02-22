@@ -3,7 +3,7 @@
 ; The official C++ library can be found here: https://www.pjon.org/
 ; Jotham Gates
 ; Created: 24/11/2020
-; Modified: 25/01/2021
+; Modified: 22/02/2023
 ; https://github.com/jgOhYeah/PICAXE-Libraries-Extras
 ; TODO: Allow bus ids and more flexibility in packet types
 ; TODO: Allow it to work with other strategies
