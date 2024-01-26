@@ -20,44 +20,107 @@ class UndeclaredSubroutineException(UndeclaredException):
 def title(msg:str) -> str:
     return f"\u001b[33m{msg}\u001b[0m"
 
+def highlight(msg:str) -> str:
+    return f"\u001b[34m{msg}\u001b[39m"
+
+def highlight2(msg:str) -> str:
+    return f"\u001b[35m{msg}\u001b[39m"
+
+def highlight3(msg:str) -> str:
+    return f"\u001b[32m{msg}\u001b[39m"
+
+def underline(msg:str) -> str:
+    return f"\u001b[4m{msg}\u001b[24m"
+
+def bold(msg:str) -> str:
+    return f"\u001b[1m{msg}\u001b[0m"
+
 class Variable:
-    def __init__(self, type: str):
+    def __init__(self, type: str, name:str):
         self.type = type
-        self.aliases = []
+        self.aliases: List[str] = []
+        self.name = name
+        self.shares: List[Variable] = []
+        self._ref = False
+        self._force_show = False
     
     def add_alias(self, names:str) -> None:
         self.aliases.append(names)
     
     def __str__(self) -> str:
         return f"Variable of type '{self.type}'"
+    
+    def __repr__(self) -> str:
+        return f"({underline(self.name)}, {', '.join(self.aliases)})"
+    
+    def is_referenced(self, include_force_show:bool=True) -> bool:
+        return bool(len(self.aliases)) or self._ref or (include_force_show and self._force_show)
+
+    def set_referenced(self) -> None:
+        self._ref = True
+
+    def force_show(self) -> None:
+        self._force_show = True
+
+    def referenced_shares(self, include_force_show:bool=True) -> List[Variable]:
+        return list(filter(lambda var: var.is_referenced(include_force_show), self.shares))
+    
+    def coloured_name(self, length:int=0) -> str:
+        name_length = f"{self.name:>{length}}"
+        if not self.is_referenced(False) and len(self.referenced_shares(False)) == 0:
+            # Not reference by anything.
+            return highlight(name_length)
+        else:
+            return name_length
 
 class VariableManager:
     def __init__(self, variables_count:int=28):
         # Setup variables
         self.variables: Dict[str, str | Variable] = {}
     
-        # Add bits
-        for i in range(32):
-            self.variables[f"bit{i}"] = Variable("bit")
+        # Add words
+        for i in range(variables_count // 2):
+            name = f"w{i}"
+            self.variables[name] = Variable("word", name)
+            self.variables[name].force_show()
 
         # Add bytes
         for i in range(variables_count):
-            self.variables[f"b{i}"] = Variable("byte")
-        
-        # Add words
-        for i in range(variables_count // 2):
-            self.variables[f"w{i}"] = Variable("word")
+            name = f"b{i}"
+            self.variables[name] = Variable("byte", name)
+            self.share_vars(self.variables[name], self.variables[f"w{i//2}"])
+            self.variables[name].force_show()
+
+        # Add bits
+        for i in range(32):
+            name = f"bit{i}"
+            self.variables[name] = Variable("bit", name)
+            self.share_vars(self.variables[name], self.variables[f"b{i//8}"])
+            self.share_vars(self.variables[name], self.variables[f"w{i//16}"])
+
 
         # Add output pins
         for letter in "ABCD":
             for i in range(8):
-                self.variables[f"{letter}.{i}"] = Variable("output pin")
+                name = f"{letter}.{i}"
+                self.variables[name] = Variable("output pin", name)
         
         # Add input pins
         for letter in "ABCD":
             for i in range(8):
-                self.variables[f"pin{letter}.{i}"] = Variable("input pin")
+                name = f"pin{letter}.{i}"
+                self.variables[name] = Variable("input pin", name)
+
+        # Special variables
+        self.variables["time"] = Variable("special", "time")
+        self.variables["bptr"] = Variable("special", "bptr")
+        self.variables["@bptr"] = Variable("special", "@bptr")
+        self.variables["@bptrinc"] = Variable("special", "@bptrinc")
     
+    def share_vars(self, var1: Variable, var2: Variable) -> None:
+        var1.shares.append(var2)
+        var2.shares.append(var1)
+
     def get_variable(self, reference:str) -> Variable | None:
         if reference in self.variables:
             # Variable is either another alias or the main definition.
@@ -92,12 +155,13 @@ class VariableManager:
     def assignment_table(self) -> str:
         result = [
             title("Variable aliases"),
-            f"| {'Variable':>20} | {'References':50} |",
-            f"| {'-'*20}:|:{'-'*50} |"
+            f"| {'Variable':>20} | {'References':50} | {'Shares':50} |",
+            f"| {'-'*20}:|:{'-'*50} |:{'-'*50} |"
         ]
         for var in self.variables:
-            if isinstance(self.variables[var], Variable) and len(self.variables[var].aliases):
-                result.append(f"| {var:>20} | {', '.join(self.variables[var].aliases):50} |")
+            var_obj = self.variables[var]
+            if isinstance(var_obj, Variable) and var_obj.is_referenced():
+                result.append(f"| {var_obj.coloured_name(20)} | {', '.join(var_obj.aliases):50} | {', '.join([i.coloured_name() for i in var_obj.referenced_shares()]):50} |")
         
         return "\n".join(result)
 
@@ -114,32 +178,41 @@ class Subroutine:
             calls.called_by.append(self)
 
     def add_variable(self, var: Variable):
-        self.vars.append(var)
+        var.set_referenced()
+        if var not in self.vars:
+            self.vars.append(var)
 
     def get_calls(self) -> List[Subroutine]:
         result = list(set(self._get_calls_helper()))
-        result.sort()
         return result
 
     def _get_calls_helper(self) -> List[Subroutine]:
-        result = []
+        result = self.calls.copy()
         for sub in self.calls:
-            result.extend(sub.getCalls())
+            result.extend(sub._get_calls_helper())
 
         return result
 
     def get_nested_vars(self) -> List[Variable]:
         result = self.vars.copy()
-        for sub in self.get_nested_vars():
+        for sub in self.get_calls():
             result.extend(sub.vars)
         
         # Get rid of duplicates and sort
         result = list(set(result))
-        result.sort()
         return result
 
     def call_stack_helper(self, level) -> List[str]:
-        result = [f"{'    '*level}- {self.name}"]
+        def format_var_list(lst:List[Variable]) -> str:
+            return ", ".join([repr(v) for v in sortByName(lst)])
+
+        result = [
+            bold(f"{'  '*level}{highlight(str(level) + '.')} {self.name}"),
+            # f"{'  '*(level+1)}{highlight2('-')} {', '.join(self.get_nested_vars())}",
+            highlight2(f"{'  '*(level+1)}- {format_var_list(self.vars)}"),
+            highlight3(f"{'  '*(level+1)}> {format_var_list(self.get_nested_vars())}"),
+        ]
+        # print(self.get_calls())
         for i in self.calls:
             result.extend(i.call_stack_helper(level+1))
         
@@ -156,6 +229,13 @@ class Subroutine:
                 result |= i.is_recursion(child)
             
             return result
+    
+    def __repr__(self) -> str:
+        return self.name
+
+VS = Type[Variable | Subroutine]
+def sortByName(lst:List[VS]) -> List[VS]:
+    return sorted(lst, key=lambda item: item.name)
 
 class SubroutineManager:
     def __init__(self) -> None:
@@ -252,7 +332,7 @@ def analyse(filename:str):
                     print(f"'{cur_sub}' returns")
 
                 cur_sub = label
-            else:
+            elif not workingline_lower.startswith("symbol"):
                 # Other code. Scan for references.
                 words = replace_punctuation(workingline_lower).split()
                 for word in words:
